@@ -8,6 +8,7 @@ set autoindent          " auto-indent for programming
 set showcmd             " display incomplete commands
 set nobackup            " do not keep a backup file
 set number              " show line numbers
+set relativenumber      " relative line numbers (hybrid with 'number') for motion counts
 set ruler               " show the current row and column
 
 set hlsearch            " highlight searches
