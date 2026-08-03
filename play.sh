@@ -60,28 +60,38 @@ pick_random_id() {
     | awk 'BEGIN{srand()} {a[NR]=$0} END{if(NR>0) print a[int(rand()*NR)+1]}'
 }
 
-ID="${1:-}"
-if [ -z "$ID" ]; then
-  echo "Fetching a random challenge from $HOST ..."
-  ID="$(pick_random_id)"
-  [ -n "$ID" ] || { echo "error: could not find any challenge ids on the front page" >&2; exit 1; }
-fi
-echo "${C_BOLD}${C_CYAN}Challenge:${C_RESET} $ID"
-echo "${C_DIM}Leaderboard: $HOST/challenges/$ID${C_RESET}"
-
-# --- download -----------------------------------------------------------------
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/vimgolf.XXXXXX")"
 trap 'rm -rf "$WORKDIR"' EXIT
 
-# Read the download helper's output lines (work path, target path, type).
-# Avoid `mapfile` -- macOS ships bash 3.2 which doesn't have it.
-DL_OUT="$(ruby "$HERE/golf.rb" download "$ID" "$WORKDIR")"
-WORK="$(printf '%s\n' "$DL_OUT" | sed -n '1p')"
-TARGET="$(printf '%s\n' "$DL_OUT" | sed -n '2p')"
+# load_challenge [id] -- resolve an id (random if none), download it, and set
+# the globals ID / WORK / TARGET / PRISTINE. Returns non-zero on failure.
+load_challenge() {
+  ID="${1:-}"
+  if [ -z "$ID" ]; then
+    echo "${C_DIM}Fetching a random challenge from $HOST ...${C_RESET}"
+    ID="$(pick_random_id)"
+    [ -n "$ID" ] || { echo "error: could not find any challenge ids on the front page" >&2; return 1; }
+  fi
 
-# Pristine copy of the starting text so "retry" always resets the buffer.
-PRISTINE="$WORKDIR/pristine"
-cp "$WORK" "$PRISTINE"
+  # Read the download helper's output lines (work path, target path, type).
+  # Avoid `mapfile` -- macOS ships bash 3.2 which doesn't have it.
+  local dl_out
+  dl_out="$(ruby "$HERE/golf.rb" download "$ID" "$WORKDIR")" || return 1
+  WORK="$(printf '%s\n' "$dl_out" | sed -n '1p')"
+  TARGET="$(printf '%s\n' "$dl_out" | sed -n '2p')"
+
+  # Pristine copy of the starting text so "retry" always resets the buffer.
+  PRISTINE="$WORKDIR/pristine"
+  cp "$WORK" "$PRISTINE"
+
+  echo "${C_BOLD}${C_CYAN}Challenge:${C_RESET} $ID"
+  echo "${C_DIM}Leaderboard: $HOST/challenges/$ID${C_RESET}"
+}
+
+# Remember whether the user pinned a specific challenge; skip only re-rolls a
+# random one when they didn't.
+EXPLICIT_ID="${1:-}"
+load_challenge "$EXPLICIT_ID" || exit 1
 
 # --- play loop ----------------------------------------------------------------
 while :; do
@@ -97,8 +107,18 @@ while :; do
   cat "$TARGET"
   echo "${C_DIM}===============================================================${C_RESET}"
   echo "${C_DIM}While editing, press ${C_RESET}${C_YELLOW}F2${C_RESET}${C_DIM} anytime to peek at the target (costs no keystrokes).${C_RESET}"
-  printf "${C_BOLD}Press Enter to start editing...${C_RESET} "
-  read -r _ </dev/tty || true
+  if [ -z "$EXPLICIT_ID" ]; then
+    printf "${C_BOLD}Press Enter to play${C_RESET}, or ${C_YELLOW}s${C_RESET}${C_BOLD}+Enter to skip to another challenge:${C_RESET} "
+  else
+    printf "${C_BOLD}Press Enter to start editing...${C_RESET} "
+  fi
+  read -r action </dev/tty || action=""
+  # Skip to a fresh random challenge (only when no specific id was requested).
+  if [ -z "$EXPLICIT_ID" ] && { [ "$action" = "s" ] || [ "$action" = "S" ]; }; then
+    echo "${C_DIM}Skipping...${C_RESET}"
+    load_challenge "" || exit 1
+    continue
+  fi
 
   # Isolated nvim: our vimrc, no plugins, no shada, no user config.
   # -u loads golf.vimrc; --cmd runs before that to point the capture module
