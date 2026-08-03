@@ -108,12 +108,17 @@ while :; do
   echo "${C_DIM}===============================================================${C_RESET}"
   echo "${C_DIM}While editing, press ${C_RESET}${C_YELLOW}F2${C_RESET}${C_DIM} anytime to peek at the target (costs no keystrokes).${C_RESET}"
   if [ -z "$EXPLICIT_ID" ]; then
-    echo "${C_GREEN}[Enter]${C_RESET} Play challenge   ${C_YELLOW}[s]${C_RESET} Skip to another challenge"
+    echo "${C_GREEN}[Enter]${C_RESET} Play challenge   ${C_YELLOW}[s]${C_RESET} Skip to another challenge   ${C_YELLOW}[q]${C_RESET} Quit"
   else
-    echo "${C_GREEN}[Enter]${C_RESET} Play challenge"
+    echo "${C_GREEN}[Enter]${C_RESET} Play challenge   ${C_YELLOW}[q]${C_RESET} Quit"
   fi
   printf "${C_BOLD}Choice>${C_RESET} "
-  read -r action </dev/tty || action=""
+  read -r action </dev/tty || action="q"
+  # Quit from the preview.
+  if [ "$action" = "q" ] || [ "$action" = "Q" ]; then
+    echo "Thanks for playing!"
+    exit 0
+  fi
   # Skip to a fresh random challenge (only when no specific id was requested).
   if [ -z "$EXPLICIT_ID" ] && { [ "$action" = "s" ] || [ "$action" = "S" ]; }; then
     echo "${C_DIM}Skipping...${C_RESET}"
