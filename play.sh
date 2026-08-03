@@ -10,7 +10,11 @@
 #   ./play.sh                 # random challenge from vimgolf.com's front page
 #   ./play.sh <challenge_id>  # a specific challenge
 #
-set -euo pipefail
+# Note: intentionally NOT using `set -e`/`pipefail`. This is an interactive
+# loop where non-zero exits are normal and expected (diff on mismatch, read at
+# EOF, grep with no match); `set -e` would abort the whole session mid-menu.
+# We keep `-u` to catch unset-variable typos, and handle failures explicitly.
+set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOST="${GOLFHOST:-https://www.vimgolf.com}"
@@ -34,7 +38,9 @@ fi
 # Falls back gracefully if `diff` produces nothing (shouldn't happen on mismatch).
 show_diff() {
   local a="$1" b="$2"
-  diff -u --label "your buffer" --label "target" "$a" "$b" \
+  # `diff` exits 1 when files differ (the normal case here); swallow it so the
+  # caller never sees a non-zero status.
+  { diff -u --label "your buffer" --label "target" "$a" "$b" || true; } \
     | awk -v R="$C_RED" -v G="$C_GREEN" -v C="$C_CYAN" -v D="$C_DIM" -v X="$C_RESET" '
         NR<=2 { next }                                  # skip ---/+++ header lines
         /^@@/  { print C $0 X; next }
